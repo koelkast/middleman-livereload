@@ -9,6 +9,7 @@ module Middleman
     option :no_swf, false, 'Disable Flash WebSocket polyfill for browsers that support native WebSockets'
     option :host, Socket.ip_address_list.find(->{ Addrinfo.ip 'localhost' }, &:ipv4_private?).ip_address, 'Host to bind LiveReload API server to'
     option :ignore, [], 'Array of patterns for paths that must be ignored'
+    option :bundle_css_files, ['stylesheets/application.css'], 'Array of patterns that include bundle files'
 
     def initialize(app, options_hash={}, &block)
       super
@@ -25,6 +26,7 @@ module Middleman
       host = options.host
       no_swf = options.no_swf
       ignore = options.ignore
+      bundle_files = options.bundle_css_files
       options_hash = options.to_h
 
       app.ready do
@@ -46,6 +48,20 @@ module Middleman
             file_resource = sitemap.find_resource_by_path(file_url)
             if file_resource
               reload_path = file_resource.url
+            elsif file.basename.to_s[0] == '_'
+              reload_path = bundle_files.map do |bundle_path|
+                file_resource = sitemap.find_resource_by_path(bundle_path)
+
+                if file_resource
+                  path = file_resource.file_descriptor.full_path
+                  app.files.watcher_for_path([:source], path).send(:update, [path], [])
+                  path.to_s
+                else
+                  nil
+                end
+              end.compact
+
+              logger.debug "LiveReload: Reloading bundles - #{reload_path.inspect}"
             end
           end
 
